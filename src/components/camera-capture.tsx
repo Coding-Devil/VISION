@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState } from 'react';
 import VideoStream from './camera/video-stream';
 import CameraControls from './camera/camera-controls';
 import { processImage } from '../lib/image-processing';
@@ -14,41 +14,8 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
-  const [currentDeviceId, setCurrentDeviceId] = useState<string | undefined>(undefined);
   const [config, setConfig] = useState<CameraConfig>({ facingMode: 'environment' });
   const audioBeacon = useRef(new AudioBeacon());
-  const videoRef = useRef<HTMLVideoElement>(null);
-
-  useEffect(() => {
-    const enumerateDevices = async () => {
-      try {
-        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
-          console.warn("Device enumeration not supported.");
-          return;
-        }
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        const videoInputs = devices.filter(device => device.kind === 'videoinput');
-        setVideoDevices(videoInputs);
-        if (videoInputs.length > 0 && !currentDeviceId) {
-          const initialDevice = 
-            videoInputs.find(d => d.label.toLowerCase().includes(config.facingMode === 'environment' ? 'back' : 'front')) || 
-            videoInputs[0];
-          setCurrentDeviceId(initialDevice.deviceId);
-        }
-      } catch (err) {
-        console.error("Error enumerating devices:", err);
-        handleError("Could not list cameras.");
-      }
-    };
-
-    enumerateDevices();
-    navigator.mediaDevices?.addEventListener('devicechange', enumerateDevices);
-    return () => {
-      navigator.mediaDevices?.removeEventListener('devicechange', enumerateDevices);
-    };
-  }, [config.facingMode]);
 
   const handleStreamReady = (newStream: MediaStream) => {
     if (stream) {
@@ -56,12 +23,6 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
     }
     setStream(newStream);
     setError('');
-    setIsSwitching(false);
-    const currentTrack = newStream.getVideoTracks()[0];
-    if (currentTrack) {
-      const settings = currentTrack.getSettings();
-      setCurrentDeviceId(settings.deviceId);
-    }
     audioBeacon.current.playSuccess();
   };
 
@@ -71,18 +32,15 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   };
 
   const captureImage = async () => {
-    setIsProcessing(true);
-    setError('');
-
-    if (!stream || !canvasRef.current || !videoRef.current) {
-      handleError('Camera not ready or element missing.');
-      setIsProcessing(false);
-      return;
-    }
+    if (!stream || !canvasRef.current || isProcessing) return;
 
     try {
+      setIsProcessing(true);
+      setError('');
+
       const canvas = canvasRef.current;
-      const video = videoRef.current;
+      const video = document.querySelector('video');
+      if (!video) throw new Error('Video element not found');
       
       const captureWidth = 1280;
       const captureHeight = Math.round((video.videoHeight * captureWidth) / video.videoWidth);
@@ -112,59 +70,19 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   };
 
   const toggleCamera = () => {
-    if (isProcessing || isSwitching || videoDevices.length < 2) {
-      if(videoDevices.length < 2) {
-        console.log("Only one camera detected, cannot switch.");
-      }
-      return;
-    }
-
-    setIsSwitching(true);
-    setError('');
-
-    try {
-      const currentIndex = videoDevices.findIndex(device => device.deviceId === currentDeviceId);
-      const nextIndex = (currentIndex + 1) % videoDevices.length;
-      const nextDevice = videoDevices[nextIndex];
-      
-      console.log(`Switching camera from ${currentDeviceId} to ${nextDevice.deviceId}`);
-      
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        setStream(null);
-      }
-
-      setConfig({ deviceId: nextDevice.deviceId });
-      setCurrentDeviceId(nextDevice.deviceId);
-
-    } catch (err) {
-      console.error("Error switching camera:", err);
-      handleError("Failed to switch camera.");
-      setIsSwitching(false);
-    }
+    setConfig(prev => ({
+      facingMode: prev.facingMode === 'user' ? 'environment' : 'user'
+    }));
   };
 
   return (
     <div className="relative rounded-lg overflow-hidden bg-gray-800/50 border border-gray-700/50 backdrop-blur-sm">
       <VideoStream
-        videoRef={videoRef}
-        config={currentDeviceId ? { deviceId: currentDeviceId } : config}
+        config={config}
         onStreamReady={handleStreamReady}
         onError={handleError}
       />
       <canvas ref={canvasRef} className="hidden" />
-      
-      {isProcessing && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-          <div className="text-white text-lg font-semibold animate-pulse">Processing...</div>
-        </div>
-      )}
-      
-      {isSwitching && !isProcessing && (
-        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
-          <div className="text-white text-lg font-semibold animate-pulse">Switching Camera...</div>
-        </div>
-      )}
       
       {error && (
         <div className="absolute top-0 left-0 right-0 bg-red-500/90 text-white p-2 text-sm text-center">
@@ -175,7 +93,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
       <CameraControls
         onCapture={captureImage}
         onToggle={toggleCamera}
-        isProcessing={isProcessing || isSwitching}
+        isProcessing={isProcessing}
       />
     </div>
   );

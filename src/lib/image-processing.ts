@@ -6,29 +6,18 @@ export async function processImage(imageData: string): Promise<string> {
       throw new Error('No image data provided');
     }
 
-    // Remove optimization step
-    // const optimizedImage = await optimizeImage(imageData);
+    // Optimize image before processing
+    const optimizedImage = await optimizeImage(imageData);
     
-    // Convert original image data URL to binary Blob for the API
-    const base64Data = imageData.replace(/^data:image\/jpeg;base64,/, '');
-    const binaryData = atob(base64Data);
-    const bytes = new Uint8Array(binaryData.length);
-    for (let i = 0; i < binaryData.length; i++) {
-      bytes[i] = binaryData.charCodeAt(i);
-    }
-    const blob = new Blob([bytes], { type: 'image/jpeg' });
-
     const response = await fetch(
       "https://api-inference.huggingface.co/models/Salesforce/blip-image-captioning-large",
       {
         headers: {
           Authorization: "Bearer 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",
-          // The Content-Type should be the actual image type
-          "Content-Type": "image/jpeg", 
+          "Content-Type": "application/json",
         },
         method: "POST",
-        // Send the Blob directly
-        body: blob,
+        body: optimizedImage,
       }
     );
 
@@ -51,8 +40,7 @@ export async function processImage(imageData: string): Promise<string> {
   }
 }
 
-// Remove optimization function
-/*
+// Add new function to optimize image
 async function optimizeImage(imageData: string): Promise<Uint8Array> {
   // Remove data URL prefix
   const base64Data = imageData.replace(/^data:image\/jpeg;base64,/, '');
@@ -107,4 +95,3 @@ async function optimizeImage(imageData: string): Promise<Uint8Array> {
 
   return optimizedBytes;
 }
-*/
