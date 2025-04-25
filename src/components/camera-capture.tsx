@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import VideoStream from './camera/video-stream';
 import CameraControls from './camera/camera-controls';
 import { processImage } from '../lib/image-processing';
@@ -14,8 +14,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [error, setError] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
   const [config, setConfig] = useState<CameraConfig>({ facingMode: 'environment' });
   const audioBeacon = useRef(new AudioBeacon());
+  const videoRef = useRef<HTMLVideoElement>(null);
 
   const handleStreamReady = (newStream: MediaStream) => {
     if (stream) {
@@ -23,6 +25,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
     }
     setStream(newStream);
     setError('');
+    setIsSwitching(false);
     audioBeacon.current.playSuccess();
   };
 
@@ -32,15 +35,18 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   };
 
   const captureImage = async () => {
-    if (!stream || !canvasRef.current || isProcessing) return;
+    setIsProcessing(true);
+    setError('');
+
+    if (!stream || !canvasRef.current || !videoRef.current) {
+      handleError('Camera not ready or element missing.');
+      setIsProcessing(false);
+      return;
+    }
 
     try {
-      setIsProcessing(true);
-      setError('');
-
       const canvas = canvasRef.current;
-      const video = document.querySelector('video');
-      if (!video) throw new Error('Video element not found');
+      const video = videoRef.current;
       
       const captureWidth = 1280;
       const captureHeight = Math.round((video.videoHeight * captureWidth) / video.videoWidth);
@@ -70,6 +76,10 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   };
 
   const toggleCamera = () => {
+    if (isProcessing || isSwitching) return;
+
+    setIsSwitching(true);
+    setError('');
     setConfig(prev => ({
       facingMode: prev.facingMode === 'user' ? 'environment' : 'user'
     }));
@@ -78,11 +88,24 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
   return (
     <div className="relative rounded-lg overflow-hidden bg-gray-800/50 border border-gray-700/50 backdrop-blur-sm">
       <VideoStream
+        videoRef={videoRef}
         config={config}
         onStreamReady={handleStreamReady}
         onError={handleError}
       />
       <canvas ref={canvasRef} className="hidden" />
+      
+      {isProcessing && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+          <div className="text-white text-lg font-semibold animate-pulse">Processing...</div>
+        </div>
+      )}
+      
+      {isSwitching && !isProcessing && (
+        <div className="absolute inset-0 bg-black/50 flex items-center justify-center z-10">
+          <div className="text-white text-lg font-semibold animate-pulse">Switching Camera...</div>
+        </div>
+      )}
       
       {error && (
         <div className="absolute top-0 left-0 right-0 bg-red-500/90 text-white p-2 text-sm text-center">
@@ -93,7 +116,7 @@ const CameraCapture: React.FC<CameraCaptureProps> = ({ onImageProcessed }) => {
       <CameraControls
         onCapture={captureImage}
         onToggle={toggleCamera}
-        isProcessing={isProcessing}
+        isProcessing={isProcessing || isSwitching}
       />
     </div>
   );

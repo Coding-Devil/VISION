@@ -1,15 +1,19 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { CameraConfig } from '../../lib/types';
 
 interface VideoStreamProps {
+  videoRef: React.RefObject<HTMLVideoElement>;
   config: CameraConfig;
   onStreamReady: (stream: MediaStream) => void;
   onError: (error: string) => void;
 }
 
-const VideoStream: React.FC<VideoStreamProps> = ({ config, onStreamReady, onError }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-
+const VideoStream: React.FC<VideoStreamProps> = ({ 
+  videoRef,
+  config, 
+  onStreamReady, 
+  onError 
+}) => {
   useEffect(() => {
     const startCamera = async () => {
       try {
@@ -27,7 +31,7 @@ const VideoStream: React.FC<VideoStreamProps> = ({ config, onStreamReady, onErro
     };
 
     startCamera();
-  }, [config.facingMode]);
+  }, [config.facingMode, onStreamReady, onError, videoRef]);
 
   return (
     <video
